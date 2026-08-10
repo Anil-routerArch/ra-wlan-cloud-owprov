@@ -40,15 +40,43 @@ jobs:
       with:
         go-version: '1.21'
 
+    - name: Build Local owprov Docker Image
+      run: |
+        docker build -t owprov:test .
+
     - name: Spin up Docker Containers in GitHub Actions Environment
       run: |
-        docker network create openwifi
+        docker rm -f postgres owsec owprov 2>/dev/null || true
+        docker network create openwifi 2>/dev/null || true
         docker run -d --name postgres --network openwifi -e POSTGRES_PASSWORD=postgrespassword -e POSTGRES_USER=postgres -e POSTGRES_DB=openwifi postgres:15-alpine
-        sleep 5
-        docker run -d --name owsec --network openwifi -p 16001:16001 -e SECURITY_DB_HOST=postgres -e SECURITY_DB_USER=postgres -e SECURITY_DB_PASSWORD=postgrespassword -e SECURITY_DB_DATABASE=openwifi ghcr.io/routerarchitects/ra-owsec:v1.0.0
-        sleep 10
-        docker run -d --name owprov --network openwifi -p 16005:16005 -e PROV_DB_HOST=postgres -e PROV_DB_USER=postgres -e PROV_DB_PASSWORD=postgrespassword -e PROV_DB_DATABASE=openwifi -e SECURITY_SERVER_URI=https://owsec:16001 routerarchitect123/ra-ow-prov:anil
-        sleep 10
+        
+        echo "Waiting for Postgres to be ready..."
+        until docker exec postgres pg_isready -U postgres; do sleep 2; done
+
+        docker run -d --name owsec --network openwifi -p 16001:16001 \
+          -e TEMPLATE_CONFIG=true \
+          -e STORAGE_TYPE=postgresql \
+          -e STORAGE_TYPE_POSTGRESQL_HOST=postgres \
+          -e STORAGE_TYPE_POSTGRESQL_USERNAME=postgres \
+          -e STORAGE_TYPE_POSTGRESQL_PASSWORD=postgrespassword \
+          -e STORAGE_TYPE_POSTGRESQL_DATABASE=openwifi \
+          ghcr.io/routerarchitects/ra-owsec:v1.0.0
+        
+        echo "Waiting for owsec service startup..."
+        sleep 15
+
+        docker run -d --name owprov --network openwifi -p 16005:16005 \
+          -e TEMPLATE_CONFIG=true \
+          -e STORAGE_TYPE=postgresql \
+          -e STORAGE_TYPE_POSTGRESQL_HOST=postgres \
+          -e STORAGE_TYPE_POSTGRESQL_USERNAME=postgres \
+          -e STORAGE_TYPE_POSTGRESQL_PASSWORD=postgrespassword \
+          -e STORAGE_TYPE_POSTGRESQL_DATABASE=openwifi \
+          -e SECURITY_SERVER_URI=https://owsec:16001 \
+          owprov:test
+        
+        echo "Waiting for owprov service startup..."
+        sleep 15
 
     - name: Run Root RBAC Lab Test Suite
       run: |
@@ -59,6 +87,16 @@ jobs:
       run: |
         cd tests/lab_tests
         TEST_CSV=owprov_rbac_v2_1_admin_lab_test_cases.csv RESULTS_CSV=rbac_admin_actual_results.csv go run main.go
+
+    - name: Dump Container Logs on Failure
+      if: failure()
+      run: |
+        echo "=== Postgres Logs ==="
+        docker logs postgres || true
+        echo "=== OWSEC Logs ==="
+        docker logs owsec || true
+        echo "=== OWPROV Logs ==="
+        docker logs owprov || true
 
   openapi-validation:
     name: Validate OpenAPI Schemas
