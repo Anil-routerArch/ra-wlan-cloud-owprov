@@ -44,7 +44,7 @@ jobs:
       run: |
         docker build -t owprov:test .
 
-    - name: Generate Automated Test SSL Certificates
+    - name: Generate Automated Test SSL Certificates and Volume
       run: |
         mkdir -p /tmp/certs
         openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
@@ -53,6 +53,10 @@ jobs:
           -subj "/C=US/ST=State/L=City/O=OpenWiFi/OU=IT/CN=localhost"
         cp /tmp/certs/restapi-cert.pem /tmp/certs/restapi-ca.pem
         chmod 777 -R /tmp/certs
+
+        docker volume rm -f ow_certs 2>/dev/null || true
+        docker volume create ow_certs
+        docker run --rm -v ow_certs:/dst -v /tmp/certs:/src alpine sh -c "cp -r /src/* /dst/ && chmod 777 -R /dst"
 
     - name: Spin up Docker Containers in GitHub Actions Environment
       run: |
@@ -64,7 +68,7 @@ jobs:
         until docker exec postgres pg_isready -U postgres; do sleep 2; done
 
         docker run -d --name owsec --network openwifi -p 16001:16001 \
-          -v /tmp/certs:/owsec-data/certs \
+          -v ow_certs:/owsec-data/certs \
           -e TEMPLATE_CONFIG=true \
           -e STORAGE_TYPE=postgresql \
           -e STORAGE_TYPE_POSTGRESQL_HOST=postgres \
@@ -72,12 +76,12 @@ jobs:
           -e STORAGE_TYPE_POSTGRESQL_PASSWORD=postgrespassword \
           -e STORAGE_TYPE_POSTGRESQL_DATABASE=openwifi \
           ghcr.io/routerarchitects/ra-owsec:v1.0.0
-        
+
         echo "Waiting for owsec service startup..."
         sleep 15
 
         docker run -d --name owprov --network openwifi -p 16005:16005 \
-          -v /tmp/certs:/owprov-data/certs \
+          -v ow_certs:/owprov-data/certs \
           -e TEMPLATE_CONFIG=true \
           -e STORAGE_TYPE=postgresql \
           -e STORAGE_TYPE_POSTGRESQL_HOST=postgres \
@@ -86,19 +90,19 @@ jobs:
           -e STORAGE_TYPE_POSTGRESQL_DATABASE=openwifi \
           -e SECURITY_SERVER_URI=https://owsec:16001 \
           owprov:test
-        
+
         echo "Waiting for owprov service startup..."
         sleep 15
 
     - name: Run Root RBAC Lab Test Suite
       run: |
         cd tests/lab_tests
-        TEST_CSV=owprov_rbac_v2_1_root_lab_test_cases.csv RESULTS_CSV=rbac_root_actual_results.csv go run main.go
+        OWSEC_BASE_URL=https://127.0.0.1:16001/api/v1 OWPROV_BASE_URL=https://127.0.0.1:16005/api/v1 TEST_CSV=owprov_rbac_v2_1_root_lab_test_cases.csv RESULTS_CSV=rbac_root_actual_results.csv go run main.go
 
     - name: Run Admin RBAC Lab Test Suite
       run: |
         cd tests/lab_tests
-        TEST_CSV=owprov_rbac_v2_1_admin_lab_test_cases.csv RESULTS_CSV=rbac_admin_actual_results.csv go run main.go
+        OWSEC_BASE_URL=https://127.0.0.1:16001/api/v1 OWPROV_BASE_URL=https://127.0.0.1:16005/api/v1 TEST_CSV=owprov_rbac_v2_1_admin_lab_test_cases.csv RESULTS_CSV=rbac_admin_actual_results.csv go run main.go
 
     - name: Dump Container Logs on Failure
       if: failure()

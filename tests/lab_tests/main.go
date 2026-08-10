@@ -74,8 +74,8 @@ var KnownFailures = map[string]string{
 func main() {
 	fmt.Println("=== Starting Hierarchical RBAC v2.1 Lab Test Runner ===")
 
-	owsecBase := getEnv("OWSEC_BASE_URL", "https://localhost:16001/api/v1")
-	owprovBase := getEnv("OWPROV_BASE_URL", "https://localhost:16005/api/v1")
+	owsecBase := getEnv("OWSEC_BASE_URL", "https://127.0.0.1:16001/api/v1")
+	owprovBase := getEnv("OWPROV_BASE_URL", "https://127.0.0.1:16005/api/v1")
 	rootEmail := getEnv("OWSEC_ROOT_EMAIL", "tip@ucentral.com")
 
 	defaultRootPw := getEnv("OWSEC_ROOT_DEFAULT_PASSWORD", "openwifi")
