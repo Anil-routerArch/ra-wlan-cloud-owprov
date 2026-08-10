@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include <memory>
 #include <map>
 #include <mutex>
 #include <set>
@@ -25,6 +26,7 @@
 #include "RESTObjects/RESTAPI_SecurityObjects.h"
 #include "framework/AuthClient.h"
 #include "framework/RESTAPI_GenericServerAccounting.h"
+#include "framework/RESTAPI_Middleware.h"
 #include "framework/RESTAPI_RateLimiter.h"
 #include "framework/RESTAPI_utils.h"
 #include "framework/ow_constants.h"
@@ -94,7 +96,9 @@ namespace OpenWifi {
 			: Bindings_(std::move(map)), Logger_(l), Methods_(std::move(Methods)),
 			  Internal_(Internal), RateLimited_(RateLimited), SubOnlyService_(SubscriberOnly),
 			  AlwaysAuthorize_(AlwaysAuthorize), Server_(Server), MyRates_(Profile),
-			  TransactionId_(TransactionId) {}
+			  TransactionId_(TransactionId) {
+			MiddlewarePipeline_.Use(std::make_unique<RESTAPIAuthorizationMiddleware>());
+		}
 
 		bool RoleIsAuthorized(const std::string &Path, const std::string &Method,
 							  std::string &Reason);
@@ -135,8 +139,10 @@ namespace OpenWifi {
 
 				ParseParameters();
 
-				std::string Reason;
-				if (!RoleIsAuthorized(RequestIn.getURI(), Request->getMethod(), Reason)) {
+				RESTAPIRequestContext Context(RequestIn.getURI(), Request->getMethod(), UserInfo_,
+											  ParsedBody_);
+				auto MiddlewareResult = MiddlewarePipeline_.Execute(*this, Context);
+				if (!MiddlewareResult.Allowed()) {
 					return UnAuthorized(RESTAPI::Errors::ACCESS_DENIED);
 				}
 
@@ -787,6 +793,7 @@ namespace OpenWifi {
 		uint64_t TransactionId_;
 		Poco::JSON::Object::Ptr ParsedBody_;
 		std::string REST_Requester_;
+		RESTAPIMiddlewarePipeline MiddlewarePipeline_;
 	};
 
 #ifdef TIP_SECURITY_SERVICE

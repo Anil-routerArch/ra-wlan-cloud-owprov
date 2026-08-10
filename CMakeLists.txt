@@ -98,6 +98,8 @@ add_executable(owprov
         src/framework/KafkaManager.cpp
         src/framework/KafkaManager.h
         src/framework/RESTAPI_RateLimiter.h
+        src/framework/RESTAPI_Middleware.cpp
+        src/framework/RESTAPI_Middleware.h
         src/framework/WebSocketLogger.h
         src/framework/RESTAPI_GenericServerAccounting.h
         src/framework/CIDR.h
