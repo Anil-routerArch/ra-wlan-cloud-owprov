@@ -44,6 +44,16 @@ jobs:
       run: |
         docker build -t owprov:test .
 
+    - name: Generate Automated Test SSL Certificates
+      run: |
+        mkdir -p /tmp/certs
+        openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+          -keyout /tmp/certs/restapi-key.pem \
+          -out /tmp/certs/restapi-cert.pem \
+          -subj "/C=US/ST=State/L=City/O=OpenWiFi/OU=IT/CN=localhost"
+        cp /tmp/certs/restapi-cert.pem /tmp/certs/restapi-ca.pem
+        chmod 777 -R /tmp/certs
+
     - name: Spin up Docker Containers in GitHub Actions Environment
       run: |
         docker rm -f postgres owsec owprov 2>/dev/null || true
@@ -54,6 +64,7 @@ jobs:
         until docker exec postgres pg_isready -U postgres; do sleep 2; done
 
         docker run -d --name owsec --network openwifi -p 16001:16001 \
+          -v /tmp/certs:/owsec-data/certs \
           -e TEMPLATE_CONFIG=true \
           -e STORAGE_TYPE=postgresql \
           -e STORAGE_TYPE_POSTGRESQL_HOST=postgres \
@@ -66,6 +77,7 @@ jobs:
         sleep 15
 
         docker run -d --name owprov --network openwifi -p 16005:16005 \
+          -v /tmp/certs:/owprov-data/certs \
           -e TEMPLATE_CONFIG=true \
           -e STORAGE_TYPE=postgresql \
           -e STORAGE_TYPE_POSTGRESQL_HOST=postgres \
