@@ -10,6 +10,7 @@
 #include "RESTAPI/RESTAPI_db_helpers.h"
 #include "StorageService.h"
 
+
 namespace OpenWifi {
 	void RESTAPI_inventory_list_handler::SendList(const ProvObjects::InventoryTagVec &Tags,
 												  bool SerialOnly) {
